@@ -7,6 +7,16 @@ from typing import Any
 import httpx
 
 from .exceptions import OcpiError, OcpiModuleNotAvailableError
+from .models.cdrs import Cdr, CdrInput, CdrsPage
+from .models.commands import (
+    CancelReservationCommand,
+    Command,
+    CommandAck,
+    ReserveNowCommand,
+    StartSessionCommand,
+    StopSessionCommand,
+    UnlockConnectorCommand,
+)
 from .models.credentials import (
     Credentials,
     CredentialsRole,
@@ -15,8 +25,15 @@ from .models.credentials import (
 )
 from .models.envelope import OcpiResponse
 from .models.hub_client_info import HubClientInfoEntry, HubClientInfoPage
+from .models.invoice_reconciliation import (
+    InvoiceReconciliation,
+    InvoiceReconciliationInput,
+    InvoiceReconciliationsPage,
+)
 from .models.locations import Location, LocationInput, LocationsPage
+from .models.sessions import Session, SessionInput, SessionsPage
 from .models.tariffs import Tariff, TariffInput, TariffsPage
+from .models.tokens import AuthorizeResult, Token, TokenInput, TokensPage
 from .status import OCPI_STATUS
 
 DEFAULT_BASE_URL = "https://latam-evra.org/api/ocpi/2.3.0"
@@ -44,11 +61,12 @@ class OcpiClient:
 
         asyncio.run(main())
 
-    Los módulos Credentials & Registration, Locations y Tariffs están
-    implementados por el Hub. Los métodos de los demás módulos (Sessions,
-    CDRs, Tokens, Commands, Hub Client Info, Invoice Reconciliation,
-    Charging Profiles) lanzan ``NotImplementedError`` — ver README para el
-    roadmap.
+    Los módulos Credentials & Registration, Locations, Tariffs, Hub Client
+    Info, Sessions, CDRs, Tokens & Authorisation, Commands e Invoice
+    Reconciliation están implementados por el Hub. Solo Charging Profiles
+    sigue sin implementación server-side y lanza
+    ``OcpiModuleNotAvailableError`` (subclase de ``NotImplementedError``)
+    — ver README para el roadmap.
     """
 
     def __init__(
@@ -303,27 +321,335 @@ class OcpiClient:
         payload = self._unwrap(response)
         return [HubClientInfoEntry.model_validate(item) for item in payload["data"]]
 
+    # -- Sessions (implementado) ---------------------------------------------
+
+    async def get_sessions(
+        self, token_b: str, offset: int = 0, limit: int = 50
+    ) -> SessionsPage:
+        """``GET /sessions`` — listado paginado de sesiones de carga."""
+        response = await self._http.get(
+            f"{self.base_url}/sessions",
+            params={"offset": offset, "limit": limit},
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        sessions = [Session.model_validate(item) for item in payload["data"]]
+        return SessionsPage(sessions=sessions, total=len(sessions))
+
+    async def get_session(
+        self, token_b: str, country_code: str, party_id: str, session_id: str
+    ) -> Session:
+        """``GET /sessions/{country_code}/{party_id}/{session_id}``."""
+        response = await self._http.get(
+            f"{self.base_url}/sessions/{country_code}/{party_id}/{session_id}",
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        return Session.model_validate(payload["data"])
+
+    async def put_session(
+        self,
+        token_b: str,
+        country_code: str,
+        party_id: str,
+        session_id: str,
+        body: SessionInput,
+    ) -> Session:
+        """``PUT /sessions/{country_code}/{party_id}/{session_id}`` — upsert."""
+        response = await self._http.put(
+            f"{self.base_url}/sessions/{country_code}/{party_id}/{session_id}",
+            json=body.model_dump(exclude_none=True, mode="json"),
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        return Session.model_validate(payload["data"])
+
+    async def patch_session(
+        self,
+        token_b: str,
+        country_code: str,
+        party_id: str,
+        session_id: str,
+        body: dict,
+    ) -> Session:
+        """``PATCH /sessions/{country_code}/{party_id}/{session_id}`` — parcial."""
+        response = await self._http.patch(
+            f"{self.base_url}/sessions/{country_code}/{party_id}/{session_id}",
+            json=body,
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        return Session.model_validate(payload["data"])
+
+    # -- CDRs (implementado) — inmutables, sin PUT/PATCH/DELETE --------------
+
+    async def get_cdrs(
+        self, token_b: str, offset: int = 0, limit: int = 50
+    ) -> CdrsPage:
+        """``GET /cdrs`` — listado paginado de Charge Detail Records."""
+        response = await self._http.get(
+            f"{self.base_url}/cdrs",
+            params={"offset": offset, "limit": limit},
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        cdrs = [Cdr.model_validate(item) for item in payload["data"]]
+        return CdrsPage(cdrs=cdrs, total=len(cdrs))
+
+    async def get_cdr(
+        self, token_b: str, country_code: str, party_id: str, cdr_id: str
+    ) -> Cdr:
+        """``GET /cdrs/{country_code}/{party_id}/{cdr_id}``."""
+        response = await self._http.get(
+            f"{self.base_url}/cdrs/{country_code}/{party_id}/{cdr_id}",
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        return Cdr.model_validate(payload["data"])
+
+    async def post_cdr(
+        self,
+        token_b: str,
+        country_code: str,
+        party_id: str,
+        cdr_id: str,
+        body: CdrInput,
+    ) -> Cdr:
+        """``POST /cdrs/{country_code}/{party_id}/{cdr_id}`` — crea (inmutable,
+        una segunda POST con el mismo id devuelve 409)."""
+        response = await self._http.post(
+            f"{self.base_url}/cdrs/{country_code}/{party_id}/{cdr_id}",
+            json=body.model_dump(exclude_none=True, mode="json"),
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        return Cdr.model_validate(payload["data"])
+
+    # -- Tokens & Authorisation (implementado) --------------------------------
+
+    async def get_tokens(
+        self, token_b: str, offset: int = 0, limit: int = 50
+    ) -> TokensPage:
+        """``GET /tokens`` — listado paginado de tokens."""
+        response = await self._http.get(
+            f"{self.base_url}/tokens",
+            params={"offset": offset, "limit": limit},
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        tokens = [Token.model_validate(item) for item in payload["data"]]
+        return TokensPage(tokens=tokens, total=len(tokens))
+
+    async def get_token(
+        self, token_b: str, country_code: str, party_id: str, uid: str
+    ) -> Token:
+        """``GET /tokens/{country_code}/{party_id}/{token_uid}``."""
+        response = await self._http.get(
+            f"{self.base_url}/tokens/{country_code}/{party_id}/{uid}",
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        return Token.model_validate(payload["data"])
+
+    async def put_token(
+        self,
+        token_b: str,
+        country_code: str,
+        party_id: str,
+        uid: str,
+        body: TokenInput,
+    ) -> Token:
+        """``PUT /tokens/{country_code}/{party_id}/{token_uid}`` — upsert."""
+        response = await self._http.put(
+            f"{self.base_url}/tokens/{country_code}/{party_id}/{uid}",
+            json=body.model_dump(exclude_none=True, mode="json"),
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        return Token.model_validate(payload["data"])
+
+    async def patch_token(
+        self,
+        token_b: str,
+        country_code: str,
+        party_id: str,
+        uid: str,
+        body: dict,
+    ) -> Token:
+        """``PATCH /tokens/{country_code}/{party_id}/{token_uid}`` — parcial."""
+        response = await self._http.patch(
+            f"{self.base_url}/tokens/{country_code}/{party_id}/{uid}",
+            json=body,
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        return Token.model_validate(payload["data"])
+
+    async def delete_token(
+        self, token_b: str, country_code: str, party_id: str, uid: str
+    ) -> None:
+        """``DELETE /tokens/{country_code}/{party_id}/{token_uid}``."""
+        response = await self._http.delete(
+            f"{self.base_url}/tokens/{country_code}/{party_id}/{uid}",
+            headers=self._auth_header(token_b),
+        )
+        self._unwrap(response)
+
+    async def authorize_token(
+        self,
+        token_b: str,
+        country_code: str,
+        party_id: str,
+        uid: str,
+        location_references: dict | None = None,
+    ) -> AuthorizeResult:
+        """``POST /tokens/{country_code}/{party_id}/{token_uid}/authorize``.
+
+        Endpoint especial, no forma parte del CRUD de tokens. Nunca propaga
+        un error de negocio: el Hub siempre resuelve a ``{"allowed": "..."}"``,
+        incluso ante fallos internos (token inexistente, eMSP desconectado,
+        timeout de 6s) — esos casos resuelven a ``{"allowed": "BLOCKED"}"``,
+        no una excepción.
+        """
+        response = await self._http.post(
+            f"{self.base_url}/tokens/{country_code}/{party_id}/{uid}/authorize",
+            json=location_references or {},
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        return AuthorizeResult.model_validate(payload["data"])
+
+    # -- Commands (implementado) — no es CRUD: 5 métodos tipados para enviar
+    # cada tipo de comando más get_command(), cuyo GET vive en
+    # /commands/callback/{command_id} (no en /commands/{command_type}).
+    # response_url no lo genera el SDK: el llamador (un eMSP externo) debe
+    # pasar su propio callback público, se forwardea tal cual.
+    # -------------------------------------------------------------------
+
+    async def _send_command(
+        self, token_b: str, command_type: str, body: Any
+    ) -> CommandAck:
+        response = await self._http.post(
+            f"{self.base_url}/commands/{command_type}",
+            json=body.model_dump(exclude_none=True, mode="json"),
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        return CommandAck.model_validate(payload["data"])
+
+    async def start_session(
+        self, token_b: str, body: StartSessionCommand
+    ) -> CommandAck:
+        """``POST /commands/START_SESSION``."""
+        return await self._send_command(token_b, "START_SESSION", body)
+
+    async def reserve_now(
+        self, token_b: str, body: ReserveNowCommand
+    ) -> CommandAck:
+        """``POST /commands/RESERVE_NOW``."""
+        return await self._send_command(token_b, "RESERVE_NOW", body)
+
+    async def stop_session(
+        self, token_b: str, body: StopSessionCommand
+    ) -> CommandAck:
+        """``POST /commands/STOP_SESSION``."""
+        return await self._send_command(token_b, "STOP_SESSION", body)
+
+    async def unlock_connector(
+        self, token_b: str, body: UnlockConnectorCommand
+    ) -> CommandAck:
+        """``POST /commands/UNLOCK_CONNECTOR``."""
+        return await self._send_command(token_b, "UNLOCK_CONNECTOR", body)
+
+    async def cancel_reservation(
+        self, token_b: str, body: CancelReservationCommand
+    ) -> CommandAck:
+        """``POST /commands/CANCEL_RESERVATION``."""
+        return await self._send_command(token_b, "CANCEL_RESERVATION", body)
+
+    async def get_command(self, token_b: str, command_id: str) -> Command:
+        """``GET /commands/callback/{command_id}`` — estado actual del comando.
+        Si pasaron más de 30s sin respuesta, el propio GET marca ``TIMEOUT``
+        automáticamente antes de devolver."""
+        response = await self._http.get(
+            f"{self.base_url}/commands/callback/{command_id}",
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        return Command.model_validate(payload["data"])
+
+    # -- Invoice Reconciliation (implementado) — solo PUT (upsert), sin POST,
+    # a diferencia de CDRs que es POST-only.
+    # -------------------------------------------------------------------
+
+    async def get_invoice_reconciliations(
+        self, token_b: str, offset: int = 0, limit: int = 50
+    ) -> InvoiceReconciliationsPage:
+        """``GET /invoicereconciliations`` — listado paginado."""
+        response = await self._http.get(
+            f"{self.base_url}/invoicereconciliations",
+            params={"offset": offset, "limit": limit},
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        reconciliations = [
+            InvoiceReconciliation.model_validate(item) for item in payload["data"]
+        ]
+        return InvoiceReconciliationsPage(
+            reconciliations=reconciliations, total=len(reconciliations)
+        )
+
+    async def get_invoice_reconciliation(
+        self,
+        token_b: str,
+        country_code: str,
+        party_id: str,
+        reconciliation_id: str,
+    ) -> InvoiceReconciliation:
+        """``GET /invoicereconciliations/{country_code}/{party_id}/{reconciliation_id}``."""
+        response = await self._http.get(
+            f"{self.base_url}/invoicereconciliations/{country_code}/{party_id}/{reconciliation_id}",
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        return InvoiceReconciliation.model_validate(payload["data"])
+
+    async def put_invoice_reconciliation(
+        self,
+        token_b: str,
+        country_code: str,
+        party_id: str,
+        reconciliation_id: str,
+        body: InvoiceReconciliationInput,
+    ) -> InvoiceReconciliation:
+        """``PUT /invoicereconciliations/{country_code}/{party_id}/{reconciliation_id}``
+        — upsert. Si el body incluye ``discrepancy_amount``, el Hub calcula
+        la conversión FX server-side y la respuesta trae
+        ``discrepancy_currency``/``discrepancy_amount_usd``/``exchange_rate_used``;
+        si no, esos 3 campos vienen ausentes."""
+        response = await self._http.put(
+            f"{self.base_url}/invoicereconciliations/{country_code}/{party_id}/{reconciliation_id}",
+            json=body.model_dump(exclude_none=True, mode="json"),
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        return InvoiceReconciliation.model_validate(payload["data"])
+
+    async def delete_invoice_reconciliation(
+        self,
+        token_b: str,
+        country_code: str,
+        party_id: str,
+        reconciliation_id: str,
+    ) -> None:
+        """``DELETE /invoicereconciliations/{country_code}/{party_id}/{reconciliation_id}``."""
+        response = await self._http.delete(
+            f"{self.base_url}/invoicereconciliations/{country_code}/{party_id}/{reconciliation_id}",
+            headers=self._auth_header(token_b),
+        )
+        self._unwrap(response)
+
     # -- Módulos en roadmap (no implementados por el Hub todavía) -----------
-
-    async def get_active_session(self, session_id: str) -> Any:
-        """Módulo Sessions — ver ``latam_evra_ocpi.models.Session``."""
-        raise OcpiModuleNotAvailableError("Sessions")
-
-    async def get_cdrs(self, *_args: Any, **_kwargs: Any) -> Any:
-        """Módulo CDRs — ver ``latam_evra_ocpi.models.Cdr``."""
-        raise OcpiModuleNotAvailableError("CDRs")
-
-    async def authorize_token(self, token_uid: str) -> Any:
-        """Módulo Tokens & Authorisation — ver ``latam_evra_ocpi.models.Token``."""
-        raise OcpiModuleNotAvailableError("Tokens & Authorisation")
-
-    async def send_command(self, command: str, *_args: Any, **_kwargs: Any) -> Any:
-        """Módulo Commands — ver ``latam_evra_ocpi.models.StartSessionCommand``."""
-        raise OcpiModuleNotAvailableError("Commands")
-
-    async def get_invoice_reconciliation(self, *_args: Any, **_kwargs: Any) -> Any:
-        """Módulo Invoice Reconciliation — ver ``latam_evra_ocpi.models.InvoiceReconciliation``."""
-        raise OcpiModuleNotAvailableError("Invoice Reconciliation")
 
     async def set_charging_profile(self, session_id: str, *_args: Any, **_kwargs: Any) -> Any:
         """Módulo Charging Profiles — ver ``latam_evra_ocpi.models.ChargingProfileRequest``."""
