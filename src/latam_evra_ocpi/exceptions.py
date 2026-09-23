@@ -32,20 +32,3 @@ class OcpiError(Exception):
             f"status_message={self.status_message!r}, "
             f"http_status={self.http_status!r})"
         )
-
-
-class OcpiModuleNotAvailableError(NotImplementedError):
-    """El módulo OCPI solicitado todavía no está disponible en el Hub.
-
-    Subclase de ``NotImplementedError`` para que ``except NotImplementedError``
-    siga funcionando, mientras permite atributos adicionales para quien
-    quiera inspeccionar qué módulo faltó.
-    """
-
-    def __init__(self, module_name: str) -> None:
-        self.module_name = module_name
-        message = (
-            f"El módulo {module_name} aún no está disponible en el Hub — "
-            "ver roadmap en docs/Roaming_hub_Latam.md"
-        )
-        super().__init__(message)

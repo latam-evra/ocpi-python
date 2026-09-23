@@ -6,8 +6,16 @@ from typing import Any
 
 import httpx
 
-from .exceptions import OcpiError, OcpiModuleNotAvailableError
+from .exceptions import OcpiError
 from .models.cdrs import Cdr, CdrInput, CdrsPage
+from .models.charging_profiles import (
+    ChargingProfile,
+    ChargingProfileAck,
+    ChargingProfileRequestRecord,
+    DeleteChargingProfileRequest,
+    GetActiveChargingProfileRequest,
+    SetChargingProfileRequest,
+)
 from .models.commands import (
     CancelReservationCommand,
     Command,
@@ -61,12 +69,10 @@ class OcpiClient:
 
         asyncio.run(main())
 
-    Los módulos Credentials & Registration, Locations, Tariffs, Hub Client
-    Info, Sessions, CDRs, Tokens & Authorisation, Commands e Invoice
-    Reconciliation están implementados por el Hub. Solo Charging Profiles
-    sigue sin implementación server-side y lanza
-    ``OcpiModuleNotAvailableError`` (subclase de ``NotImplementedError``)
-    — ver README para el roadmap.
+    Todos los módulos del roadmap OCPI 2.3.0 del Hub están implementados:
+    Credentials & Registration, Locations, Tariffs, Hub Client Info,
+    Sessions, CDRs, Tokens & Authorisation, Commands, Charging Profiles e
+    Invoice Reconciliation.
     """
 
     def __init__(
@@ -649,8 +655,97 @@ class OcpiClient:
         )
         self._unwrap(response)
 
-    # -- Módulos en roadmap (no implementados por el Hub todavía) -----------
+    # -- Charging Profiles (implementado) — no es CRUD simétrico: un método
+    # por acción sobre una sesión existente, más get_charging_profile(),
+    # cuyo GET vive en /chargingprofiles/callback/{id} (no en
+    # /chargingprofiles/{session_id}). response_url no lo genera el SDK: el
+    # llamador (un eMSP externo) debe pasar su propio callback público, se
+    # forwardea tal cual.
+    # -------------------------------------------------------------------
 
-    async def set_charging_profile(self, session_id: str, *_args: Any, **_kwargs: Any) -> Any:
-        """Módulo Charging Profiles — ver ``latam_evra_ocpi.models.ChargingProfileRequest``."""
-        raise OcpiModuleNotAvailableError("Charging Profiles")
+    async def _request_charging_profile(
+        self,
+        token_b: str,
+        action: str,
+        country_code: str,
+        party_id: str,
+        session_id: str,
+        body: Any,
+    ) -> ChargingProfileAck:
+        response = await self._http.post(
+            f"{self.base_url}/chargingprofiles/{country_code}/{party_id}/{session_id}/{action}",
+            json=body.model_dump(exclude_none=True, mode="json"),
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        return ChargingProfileAck.model_validate(payload["data"])
+
+    async def get_active_charging_profile(
+        self,
+        token_b: str,
+        country_code: str,
+        party_id: str,
+        session_id: str,
+        response_url: str,
+    ) -> ChargingProfileAck:
+        """``POST /chargingprofiles/{cc}/{pid}/{sid}/GET_ACTIVE_CHARGING_PROFILE``."""
+        return await self._request_charging_profile(
+            token_b,
+            "GET_ACTIVE_CHARGING_PROFILE",
+            country_code,
+            party_id,
+            session_id,
+            GetActiveChargingProfileRequest(response_url=response_url),
+        )
+
+    async def set_charging_profile(
+        self,
+        token_b: str,
+        country_code: str,
+        party_id: str,
+        session_id: str,
+        response_url: str,
+        charging_profile: ChargingProfile,
+    ) -> ChargingProfileAck:
+        """``POST /chargingprofiles/{cc}/{pid}/{sid}/PUT_CHARGING_PROFILE``."""
+        return await self._request_charging_profile(
+            token_b,
+            "PUT_CHARGING_PROFILE",
+            country_code,
+            party_id,
+            session_id,
+            SetChargingProfileRequest(
+                response_url=response_url, charging_profile=charging_profile
+            ),
+        )
+
+    async def delete_charging_profile(
+        self,
+        token_b: str,
+        country_code: str,
+        party_id: str,
+        session_id: str,
+        response_url: str,
+    ) -> ChargingProfileAck:
+        """``POST /chargingprofiles/{cc}/{pid}/{sid}/DELETE_CHARGING_PROFILE``."""
+        return await self._request_charging_profile(
+            token_b,
+            "DELETE_CHARGING_PROFILE",
+            country_code,
+            party_id,
+            session_id,
+            DeleteChargingProfileRequest(response_url=response_url),
+        )
+
+    async def get_charging_profile(
+        self, token_b: str, charging_profile_id: str
+    ) -> ChargingProfileRequestRecord:
+        """``GET /chargingprofiles/callback/{id}`` — estado actual de la
+        solicitud. Si pasaron más de 30s sin respuesta, el propio GET marca
+        ``FAILED`` automáticamente antes de devolver."""
+        response = await self._http.get(
+            f"{self.base_url}/chargingprofiles/callback/{charging_profile_id}",
+            headers=self._auth_header(token_b),
+        )
+        payload = self._unwrap(response)
+        return ChargingProfileRequestRecord.model_validate(payload["data"])

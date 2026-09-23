@@ -5,6 +5,46 @@ Todas las versiones notables de `latam-evra-ocpi` se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es/1.1.0/) y
 este proyecto usa [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.5.0] - 2026-09-23
+
+### Agregado
+
+- Charging Profiles implementado de verdad contra el Hub
+  (`get_active_charging_profile()`, `set_charging_profile()`,
+  `delete_charging_profile()`, `get_charging_profile()`). Reemplaza el
+  stub `set_charging_profile(session_id)` que lanzaba
+  `OcpiModuleNotAvailableError` (breaking change de firma). Al igual
+  que Commands, no es CRUD simétrico: un método por acción (GET/PUT/
+  DELETE) sobre una sesión existente, más `get_charging_profile()` cuyo
+  GET vive en `/chargingprofiles/callback/{id}`.
+- Nuevo módulo `latam_evra_ocpi.models.charging_profiles`, reemplazando
+  el `ChargingProfile`/`ChargingProfileRequest` simplificado que vivía
+  en `models.stubs` (retirado) — `ChargingProfile.limit` (único límite)
+  se reemplaza por `charging_profile_period` (lista de
+  `{start_period, limit}`), reflejando el objeto OCPI 2.3.0 real.
+
+### Quitado
+
+- Con Charging Profiles implementado, ya no queda ningún módulo en el
+  roadmap del Hub: se elimina `OcpiModuleNotAvailableError` de
+  `exceptions.py`.
+
+## [0.4.0] - 2026-09-23
+
+### Agregado
+
+- Sessions, CDRs, Tokens & Authorisation, Commands e Invoice
+  Reconciliation implementados de verdad contra el Hub. Reemplazan los
+  stubs que lanzaban `OcpiModuleNotAvailableError` (breaking change de
+  firma en todos los métodos afectados).
+- Commands es el módulo más asimétrico: sin `send_command` genérico, 5
+  métodos tipados (uno por `command_type`) más `get_command()`, cuyo
+  GET vive en `/commands/callback/{id}`, no en `/commands/{type}`.
+- Tokens gana `authorize_token()` como método standalone, separado de
+  su CRUD.
+- CDRs es solo-POST (inmutable); Invoice Reconciliation es solo-PUT
+  (sin POST) — no confundir pese a la similitud superficial.
+
 ## [0.3.0] - 2026-09-23
 
 ### Agregado

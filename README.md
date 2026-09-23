@@ -3,10 +3,9 @@
 Cliente Python no oficial para el **Hub de roaming OCPI 2.3.0** de
 [LATAM EV Roaming Alliance (LEA)](https://latam-evra.org).
 
-> **Estado:** este paquete todavía **no está publicado en PyPI**. El Hub hoy
-> solo implementa server-side el módulo **Credentials & Registration**; el
-> resto de los módulos OCPI están tipados como stubs a la espera del
-> roadmap del Hub (ver tabla más abajo).
+> **Estado:** este paquete todavía **no está publicado en PyPI**. El Hub
+> implementa server-side todos los módulos del roadmap OCPI 2.3.0 (ver
+> tabla más abajo).
 
 ## Instalación
 
@@ -100,33 +99,26 @@ except OcpiError as exc:
         print("TOKEN_A inválido o ya usado")
 ```
 
-## Módulos: disponibles vs roadmap
+## Módulos disponibles
 
-El Hub implementa OCPI 2.3.0 de forma incremental. Este SDK refleja ese
-estado exactamente — no hay métodos que simulen funcionalidad no soportada
-por el servidor.
+Todos los módulos del roadmap OCPI 2.3.0 del Hub están implementados de
+verdad, tanto server-side como en este SDK.
 
-| Módulo OCPI                     | Estado en el Hub    | Métodos del SDK                                              |
-|----------------------------------|----------------------|---------------------------------------------------------------|
-| Credentials & Registration       | ✅ Disponible        | `get_versions`, `get_details`, `register_credentials`, `renew_credentials`, `terminate_credentials` |
-| Locations                        | ✅ Disponible        | `get_locations`, `get_location`, `put_location`, `patch_location` |
-| Tariffs                          | ✅ Disponible        | `get_tariffs`, `get_tariff`, `put_tariff`, `delete_tariff` |
-| Hub Client Info                  | ✅ Disponible        | `list_hub_client_info`, `get_hub_client_info` |
-| Sessions                         | 🚧 Roadmap           | `get_active_session` → `NotImplementedError`                  |
-| CDRs                             | 🚧 Roadmap           | `get_cdrs` → `NotImplementedError`                             |
-| Tokens & Authorisation           | 🚧 Roadmap           | `authorize_token` → `NotImplementedError`                      |
-| Commands                         | 🚧 Roadmap           | `send_command` → `NotImplementedError`                          |
-| Invoice Reconciliation (Ed. 2)   | 🚧 Roadmap           | `get_invoice_reconciliation` → `NotImplementedError`            |
-| Charging Profiles                | 🚧 Roadmap           | `set_charging_profile` → `NotImplementedError`                  |
+| Módulo OCPI                     | Métodos del SDK                                              |
+|----------------------------------|---------------------------------------------------------------|
+| Credentials & Registration       | `get_versions`, `get_details`, `register_credentials`, `renew_credentials`, `terminate_credentials` |
+| Locations                        | `get_locations`, `get_location`, `put_location`, `patch_location` |
+| Tariffs                          | `get_tariffs`, `get_tariff`, `put_tariff`, `delete_tariff` |
+| Hub Client Info                  | `list_hub_client_info`, `get_hub_client_info` |
+| Sessions                         | `get_sessions`, `get_session`, `put_session`, `patch_session` |
+| CDRs                             | `get_cdrs`, `get_cdr`, `post_cdr` |
+| Tokens & Authorisation           | `get_tokens`, `get_token`, `put_token`, `patch_token`, `delete_token`, `authorize_token` |
+| Commands                         | `start_session`, `reserve_now`, `stop_session`, `unlock_connector`, `cancel_reservation`, `get_command` |
+| Charging Profiles                | `get_active_charging_profile`, `set_charging_profile`, `delete_charging_profile`, `get_charging_profile` |
+| Invoice Reconciliation (Ed. 2)   | `get_invoice_reconciliations`, `get_invoice_reconciliation`, `put_invoice_reconciliation`, `delete_invoice_reconciliation` |
 
-Los modelos Pydantic de los módulos en roadmap (`latam_evra_ocpi.models`,
-p. ej. `Location`, `Session`, `Cdr`, `Tariff`, `Token`, `HubClientInfo`,
-`InvoiceReconciliation`, `ChargingProfileRequest`) ya están definidos a
-partir de los payloads de ejemplo publicados en el Hub, para que el tipado
-esté listo apenas cada módulo se implemente server-side. Cada método
-lanza `OcpiModuleNotAvailableError` (subclase de `NotImplementedError`) con
-un mensaje que referencia el roadmap (`docs/Roaming_hub_Latam.md` en el
-repo del Hub).
+Consultá `docs/Roaming_hub_Latam.md` y `components/ModuleAccordion.tsx` en
+el repositorio del Hub para el detalle de cada módulo.
 
 ## Tests de integración
 

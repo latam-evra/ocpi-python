@@ -1,3 +1,15 @@
+from .charging_profiles import (
+    ChargingProfile,
+    ChargingProfileAck,
+    ChargingProfileAckResult,
+    ChargingProfileAction,
+    ChargingProfileFinalResult,
+    ChargingProfilePeriod,
+    ChargingProfileRequestRecord,
+    DeleteChargingProfileRequest,
+    GetActiveChargingProfileRequest,
+    SetChargingProfileRequest,
+)
 from .cdrs import (
     Cdr,
     CdrInput,
@@ -64,10 +76,6 @@ from .sessions import (
     SessionStatus,
     TokenType,
 )
-from .stubs import (
-    ChargingProfile,
-    ChargingProfileRequest,
-)
 from .tariffs import (
     PriceComponent,
     Tariff,
@@ -105,7 +113,12 @@ __all__ = [
     "ChargingPeriod",
     "ChargingPeriodDimension",
     "ChargingProfile",
-    "ChargingProfileRequest",
+    "ChargingProfileAck",
+    "ChargingProfileAckResult",
+    "ChargingProfileAction",
+    "ChargingProfileFinalResult",
+    "ChargingProfilePeriod",
+    "ChargingProfileRequestRecord",
     "Command",
     "CommandAck",
     "CommandAckResult",
@@ -116,10 +129,12 @@ __all__ = [
     "ConnectorFormat",
     "ConnectorPowerType",
     "CostAmount",
+    "DeleteChargingProfileRequest",
     "DiscrepancyAmount",
     "Evse",
     "GeoCoordinates",
     "GeoLocation",
+    "GetActiveChargingProfileRequest",
     "HubClientConnectionStatus",
     "HubClientInfoEntry",
     "HubClientInfoPage",
@@ -132,6 +147,7 @@ __all__ = [
     "LocationsPage",
     "PriceComponent",
     "ReserveNowCommand",
+    "SetChargingProfileRequest",
     "Session",
     "SessionInput",
     "SessionsPage",
