@@ -3,23 +3,20 @@
 Cliente Python no oficial para el **Hub de roaming OCPI 2.3.0** de
 [LATAM EV Roaming Alliance (LEA)](https://latam-evra.org).
 
-> **Estado:** este paquete todavía **no está publicado en PyPI**. El Hub
-> implementa server-side todos los módulos del roadmap OCPI 2.3.0 (ver
-> tabla más abajo).
+> **Estado:** publicado en PyPI como [`latam-evra-ocpi`](https://pypi.org/project/latam-evra-ocpi/).
+> El Hub implementa server-side todos los módulos del roadmap OCPI 2.3.0
+> (ver tabla más abajo).
 
 ## Instalación
 
-Mientras el paquete no esté en PyPI, instalalo directamente desde este
-repositorio:
+```bash
+pip install latam-evra-ocpi
+```
+
+También podés instalarlo directamente desde este repositorio:
 
 ```bash
 pip install -e sdks/python
-```
-
-Cuando se publique en PyPI, la instalación será simplemente:
-
-```bash
-pip install latam-evra-ocpi
 ```
 
 Requiere Python 3.9+. Dependencias runtime: [`httpx`](https://www.python-httpx.org/)
